@@ -1,0 +1,1033 @@
+# ============================================================
+# SIGN LANGUAGE ALPHABET RECOGNITION USING CNN
+# A-Z IMAGE CLASSIFICATION
+# ============================================================
+
+
+# ============================================================
+# 1. IMPORT LIBRARIES
+# ============================================================
+
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import tensorflow as tf
+
+from tensorflow.keras import layers, models
+from sklearn.metrics import confusion_matrix, classification_report
+
+
+# ============================================================
+# 2. SETTINGS
+# ============================================================
+
+IMG_SIZE = 64
+BATCH_SIZE = 32
+EPOCHS = 15
+
+MODEL_DIR = "model"
+RESULTS_DIR = "results"
+
+os.makedirs(MODEL_DIR, exist_ok=True)
+os.makedirs(RESULTS_DIR, exist_ok=True)
+
+
+# ============================================================
+# 3. ALPHABET CLASSES
+# ============================================================
+
+CLASS_NAMES = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+print("=" * 60)
+print("SIGN LANGUAGE ALPHABET RECOGNITION")
+print("=" * 60)
+
+print("\nTensorFlow Version:")
+print(tf._version_)
+
+print("\nClasses:")
+print(CLASS_NAMES)
+
+print("\nNumber of Classes:")
+print(len(CLASS_NAMES))
+
+
+# ============================================================
+# 4. FIND TRAINING DATASET
+# ============================================================
+
+possible_paths = [
+
+    "dataset/asl_alphabet_train/asl_alphabet_train",
+
+    "dataset/asl_alphabet_train",
+
+    "dataset/train"
+
+]
+
+TRAIN_DIR = None
+
+
+for path in possible_paths:
+
+    if os.path.exists(path):
+
+        folders = [
+            folder
+            for folder in os.listdir(path)
+            if os.path.isdir(
+                os.path.join(path, folder)
+            )
+        ]
+
+        alphabet_folders = [
+            folder
+            for folder in folders
+            if folder.upper() in CLASS_NAMES
+        ]
+
+        if len(alphabet_folders) >= 26:
+
+            TRAIN_DIR = path
+
+            break
+
+
+if TRAIN_DIR is None:
+
+    raise FileNotFoundError(
+        """
+Could not find the A-Z training dataset.
+
+Make sure your dataset is arranged like:
+
+dataset/
+└── asl_alphabet_train/
+    └── asl_alphabet_train/
+        ├── A/
+        ├── B/
+        ├── C/
+        └── ...
+        └── Z/
+"""
+    )
+
+
+print("\nTraining Dataset Found:")
+print(TRAIN_DIR)
+
+
+# ============================================================
+# 5. CHECK DATASET FOLDERS
+# ============================================================
+
+available_folders = [
+
+    folder
+
+    for folder in os.listdir(TRAIN_DIR)
+
+    if os.path.isdir(
+        os.path.join(TRAIN_DIR, folder)
+    )
+
+]
+
+
+print("\nFolders Found:")
+print(available_folders)
+
+
+missing_classes = [
+
+    letter
+
+    for letter in CLASS_NAMES
+
+    if letter not in available_folders
+
+]
+
+
+if missing_classes:
+
+    raise ValueError(
+
+        f"Missing alphabet folders: "
+        f"{missing_classes}"
+
+    )
+
+
+print("\nAll A-Z folders are available.")
+
+print(
+    "Extra folders such as del, nothing and space "
+    "will be ignored."
+)
+
+
+# ============================================================
+# 6. LOAD TRAINING DATA
+# ============================================================
+
+print("\n")
+print("=" * 60)
+print("LOADING TRAINING DATA")
+print("=" * 60)
+
+
+train_dataset = (
+
+    tf.keras.utils.image_dataset_from_directory(
+
+        TRAIN_DIR,
+
+        validation_split=0.20,
+
+        subset="training",
+
+        seed=123,
+
+        image_size=(
+            IMG_SIZE,
+            IMG_SIZE
+        ),
+
+        batch_size=BATCH_SIZE,
+
+        color_mode="rgb",
+
+        shuffle=True,
+
+        class_names=CLASS_NAMES
+
+    )
+
+)
+
+
+# ============================================================
+# 7. LOAD VALIDATION DATA
+# ============================================================
+
+print("\n")
+print("=" * 60)
+print("LOADING VALIDATION DATA")
+print("=" * 60)
+
+
+validation_dataset = (
+
+    tf.keras.utils.image_dataset_from_directory(
+
+        TRAIN_DIR,
+
+        validation_split=0.20,
+
+        subset="validation",
+
+        seed=123,
+
+        image_size=(
+            IMG_SIZE,
+            IMG_SIZE
+        ),
+
+        batch_size=BATCH_SIZE,
+
+        color_mode="rgb",
+
+        shuffle=False,
+
+        class_names=CLASS_NAMES
+
+    )
+
+)
+
+
+# ============================================================
+# 8. CHECK CLASSES
+# ============================================================
+
+print("\nTensorFlow Classes:")
+
+print(
+    train_dataset.class_names
+)
+
+print(
+    "\nNumber of Classes:"
+)
+
+print(
+    len(train_dataset.class_names)
+)
+
+
+if len(train_dataset.class_names) != 26:
+
+    raise ValueError(
+        "The dataset does not contain 26 classes."
+    )
+
+
+print("\nSUCCESS!")
+
+print(
+    "The CNN will classify A-Z."
+)
+
+
+# ============================================================
+# 9. DISPLAY SAMPLE IMAGES
+# ============================================================
+
+print("\nDisplaying sample images...")
+
+
+plt.figure(
+    figsize=(10, 10)
+)
+
+
+for images, labels in train_dataset.take(1):
+
+    for i in range(
+        min(16, len(images))
+    ):
+
+        plt.subplot(
+            4,
+            4,
+            i + 1
+        )
+
+        plt.imshow(
+            images[i].numpy().astype(
+                "uint8"
+            )
+        )
+
+        plt.title(
+            CLASS_NAMES[
+                labels[i].numpy()
+            ]
+        )
+
+        plt.axis("off")
+
+
+plt.tight_layout()
+
+plt.show()
+
+
+# ============================================================
+# 10. OPTIMIZE DATASET
+# ============================================================
+
+AUTOTUNE = tf.data.AUTOTUNE
+
+
+train_dataset = train_dataset.prefetch(
+    AUTOTUNE
+)
+
+
+validation_dataset = validation_dataset.prefetch(
+    AUTOTUNE
+)
+
+
+# ============================================================
+# 11. DATA AUGMENTATION
+# ============================================================
+
+data_augmentation = tf.keras.Sequential([
+
+    layers.RandomRotation(
+        0.05
+    ),
+
+    layers.RandomZoom(
+        0.10
+    ),
+
+    layers.RandomTranslation(
+        height_factor=0.10,
+
+        width_factor=0.10
+    )
+
+])
+
+
+# ============================================================
+# 12. CREATE CNN MODEL
+# ============================================================
+
+print("\n")
+print("=" * 60)
+print("CREATING CNN MODEL")
+print("=" * 60)
+
+
+model = models.Sequential([
+
+
+    # --------------------------------------------------------
+    # INPUT
+    # --------------------------------------------------------
+
+    layers.Input(
+
+        shape=(
+
+            IMG_SIZE,
+
+            IMG_SIZE,
+
+            3
+
+        )
+
+    ),
+
+
+    # --------------------------------------------------------
+    # DATA AUGMENTATION
+    # --------------------------------------------------------
+
+    data_augmentation,
+
+
+    # --------------------------------------------------------
+    # NORMALIZATION
+    # --------------------------------------------------------
+
+    layers.Rescaling(
+        1.0 / 255
+    ),
+
+
+    # --------------------------------------------------------
+    # CNN BLOCK 1
+    # --------------------------------------------------------
+
+    layers.Conv2D(
+
+        32,
+
+        (3, 3),
+
+        activation="relu"
+
+    ),
+
+    layers.MaxPooling2D(
+        (2, 2)
+    ),
+
+
+    # --------------------------------------------------------
+    # CNN BLOCK 2
+    # --------------------------------------------------------
+
+    layers.Conv2D(
+
+        64,
+
+        (3, 3),
+
+        activation="relu"
+
+    ),
+
+    layers.MaxPooling2D(
+        (2, 2)
+    ),
+
+
+    # --------------------------------------------------------
+    # CNN BLOCK 3
+    # --------------------------------------------------------
+
+    layers.Conv2D(
+
+        128,
+
+        (3, 3),
+
+        activation="relu"
+
+    ),
+
+    layers.MaxPooling2D(
+        (2, 2)
+    ),
+
+
+    # --------------------------------------------------------
+    # FLATTEN
+    # --------------------------------------------------------
+
+    layers.Flatten(),
+
+
+    # --------------------------------------------------------
+    # DENSE LAYER
+    # --------------------------------------------------------
+
+    layers.Dense(
+
+        128,
+
+        activation="relu"
+
+    ),
+
+
+    # --------------------------------------------------------
+    # DROPOUT
+    # --------------------------------------------------------
+
+    layers.Dropout(
+        0.5
+    ),
+
+
+    # --------------------------------------------------------
+    # OUTPUT LAYER
+    # 26 ALPHABET CLASSES
+    # --------------------------------------------------------
+
+    layers.Dense(
+
+        26,
+
+        activation="softmax"
+
+    )
+
+])
+
+
+# ============================================================
+# 13. MODEL SUMMARY
+# ============================================================
+
+print("\nCNN Model Architecture:")
+
+model.summary()
+
+
+# ============================================================
+# 14. COMPILE MODEL
+# ============================================================
+
+print("\nCompiling model...")
+
+
+model.compile(
+
+    optimizer=tf.keras.optimizers.Adam(
+
+        learning_rate=0.001
+
+    ),
+
+    loss="sparse_categorical_crossentropy",
+
+    metrics=[
+        "accuracy"
+    ]
+
+)
+
+
+# ============================================================
+# 15. TRAIN MODEL
+# ============================================================
+
+print("\n")
+print("=" * 60)
+print("STARTING CNN TRAINING")
+print("=" * 60)
+
+
+history = model.fit(
+
+    train_dataset,
+
+    validation_data=validation_dataset,
+
+    epochs=EPOCHS
+
+)
+
+
+# ============================================================
+# 16. SAVE TRAINED MODEL
+# ============================================================
+
+model_path = os.path.join(
+
+    MODEL_DIR,
+
+    "sign_language_cnn.keras"
+
+)
+
+
+model.save(
+    model_path
+)
+
+
+print("\n")
+print("=" * 60)
+print("TRAINED MODEL SAVED")
+print("=" * 60)
+
+
+print(
+    "\nModel:"
+)
+
+print(
+    model_path
+)
+
+
+# ============================================================
+# 17. ACCURACY GRAPH
+# ============================================================
+
+plt.figure(
+    figsize=(8, 5)
+)
+
+
+plt.plot(
+
+    history.history["accuracy"],
+
+    label="Training Accuracy"
+
+)
+
+
+plt.plot(
+
+    history.history["val_accuracy"],
+
+    label="Validation Accuracy"
+
+)
+
+
+plt.xlabel(
+    "Epoch"
+)
+
+
+plt.ylabel(
+    "Accuracy"
+)
+
+
+plt.title(
+    "Training and Validation Accuracy"
+)
+
+
+plt.legend()
+
+
+plt.grid()
+
+
+plt.tight_layout()
+
+
+accuracy_path = os.path.join(
+
+    RESULTS_DIR,
+
+    "accuracy.png"
+
+)
+
+
+plt.savefig(
+    accuracy_path
+)
+
+
+plt.show()
+
+
+# ============================================================
+# 18. LOSS GRAPH
+# ============================================================
+
+plt.figure(
+    figsize=(8, 5)
+)
+
+
+plt.plot(
+
+    history.history["loss"],
+
+    label="Training Loss"
+
+)
+
+
+plt.plot(
+
+    history.history["val_loss"],
+
+    label="Validation Loss"
+
+)
+
+
+plt.xlabel(
+    "Epoch"
+)
+
+
+plt.ylabel(
+    "Loss"
+)
+
+
+plt.title(
+    "Training and Validation Loss"
+)
+
+
+plt.legend()
+
+
+plt.grid()
+
+
+plt.tight_layout()
+
+
+loss_path = os.path.join(
+
+    RESULTS_DIR,
+
+    "loss.png"
+
+)
+
+
+plt.savefig(
+    loss_path
+)
+
+
+plt.show()
+
+
+# ============================================================
+# 19. EVALUATE MODEL
+# ============================================================
+
+print("\n")
+print("=" * 60)
+print("EVALUATING MODEL")
+print("=" * 60)
+
+
+validation_loss, validation_accuracy = model.evaluate(
+
+    validation_dataset,
+
+    verbose=1
+
+)
+
+
+print(
+    "\nValidation Accuracy:"
+)
+
+
+print(
+    f"{validation_accuracy * 100:.2f}%"
+)
+
+
+print(
+    "\nValidation Loss:"
+)
+
+
+print(
+    f"{validation_loss:.4f}"
+)
+
+
+# ============================================================
+# 20. GENERATE PREDICTIONS
+# ============================================================
+
+print("\nGenerating predictions...")
+
+
+y_true = []
+
+y_pred = []
+
+
+for images, labels in validation_dataset:
+
+
+    predictions = model.predict(
+
+        images,
+
+        verbose=0
+
+    )
+
+
+    predicted_labels = np.argmax(
+
+        predictions,
+
+        axis=1
+
+    )
+
+
+    y_true.extend(
+        labels.numpy()
+    )
+
+
+    y_pred.extend(
+        predicted_labels
+    )
+
+
+y_true = np.array(
+    y_true
+)
+
+
+y_pred = np.array(
+    y_pred
+)
+
+
+# ============================================================
+# 21. CONFUSION MATRIX
+# ============================================================
+
+print("\nCreating confusion matrix...")
+
+
+cm = confusion_matrix(
+
+    y_true,
+
+    y_pred,
+
+    labels=np.arange(26)
+
+)
+
+
+plt.figure(
+
+    figsize=(14, 12)
+
+)
+
+
+sns.heatmap(
+
+    cm,
+
+    annot=True,
+
+    fmt="d",
+
+    cmap="Blues",
+
+    xticklabels=CLASS_NAMES,
+
+    yticklabels=CLASS_NAMES
+
+)
+
+
+plt.xlabel(
+    "Predicted Alphabet"
+)
+
+
+plt.ylabel(
+    "Actual Alphabet"
+)
+
+
+plt.title(
+    "Sign Language Alphabet Confusion Matrix"
+)
+
+
+plt.tight_layout()
+
+
+confusion_path = os.path.join(
+
+    RESULTS_DIR,
+
+    "confusion_matrix.png"
+
+)
+
+
+plt.savefig(
+    confusion_path
+)
+
+
+plt.show()
+
+
+# ============================================================
+# 22. CLASSIFICATION REPORT
+# ============================================================
+
+print("\n")
+print("=" * 60)
+print("CLASSIFICATION REPORT")
+print("=" * 60)
+
+
+report = classification_report(
+
+    y_true,
+
+    y_pred,
+
+    labels=np.arange(26),
+
+    target_names=CLASS_NAMES,
+
+    zero_division=0
+
+)
+
+
+print(
+    report
+)
+
+
+# Save classification report
+
+
+report_path = os.path.join(
+
+    RESULTS_DIR,
+
+    "classification_report.txt"
+
+)
+
+
+with open(
+
+    report_path,
+
+    "w"
+
+) as file:
+
+    file.write(
+        report
+    )
+
+
+# ============================================================
+# 23. FINAL RESULT
+# ============================================================
+
+print("\n")
+print("=" * 60)
+print("TRAINING COMPLETED SUCCESSFULLY")
+print("=" * 60)
+
+
+print(
+    "\nNumber of classes:"
+)
+
+print(
+    26
+)
+
+
+print(
+    "\nValidation Accuracy:"
+)
+
+
+print(
+    f"{validation_accuracy * 100:.2f}%"
+)
+
+
+print(
+    "\nTrained Model:"
+)
+
+
+print(
+    "model/sign_language_cnn.keras"
+)
+
+
+print(
+    "\nResults:"
+)
+
+
+print(
+    "results/accuracy.png"
+)
+
+
+print(
+    "results/loss.png"
+)
+
+
+print(
+    "results/confusion_matrix.png"
+)
+
+
+print(
+    "results/classification_report.txt"
+)
+
+
+print("\n")
+print("=" * 60)
+print("READY FOR PREDICTION!")
+print("=" * 60)
