@@ -1,0 +1,216 @@
+import sys
+import os
+import numpy as np
+import tensorflow as tf
+from PIL import Image
+
+
+# ============================================================
+# SETTINGS
+# ============================================================
+
+MODEL_PATH = "model/sign_language_cnn.keras"
+
+IMG_SIZE = 64
+
+CLASS_NAMES = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+
+# ============================================================
+# CHECK MODEL
+# ============================================================
+
+if not os.path.exists(MODEL_PATH):
+
+    print("ERROR: Trained model not found!")
+
+    print(
+        "Expected:",
+        MODEL_PATH
+    )
+
+    sys.exit()
+
+
+# ============================================================
+# CHECK IMAGE PATH
+# ============================================================
+
+if len(sys.argv) < 2:
+
+    print("ERROR: Please provide an image path.")
+
+    print("\nExample:")
+
+    print(
+        "python predict.py test_images/my_A.jpg"
+    )
+
+    sys.exit()
+
+
+image_path = sys.argv[1]
+
+
+# ============================================================
+# CHECK IMAGE
+# ============================================================
+
+if not os.path.exists(image_path):
+
+    print(
+        "ERROR: Image not found:"
+    )
+
+    print(
+        image_path
+    )
+
+    sys.exit()
+
+
+# ============================================================
+# LOAD TRAINED MODEL
+# ============================================================
+
+print("Loading trained CNN model...")
+
+model = tf.keras.models.load_model(
+    MODEL_PATH
+)
+
+print("Model loaded successfully!")
+
+
+# ============================================================
+# LOAD IMAGE
+# ============================================================
+
+print("Loading image...")
+
+image = Image.open(
+    image_path
+).convert("RGB")
+
+
+# ============================================================
+# DISPLAY ORIGINAL IMAGE
+# ============================================================
+
+print(
+    "\nImage:",
+    image_path
+)
+
+print(
+    "Original size:",
+    image.size
+)
+
+
+# ============================================================
+# RESIZE IMAGE
+# ============================================================
+
+image = image.resize(
+    (
+        IMG_SIZE,
+        IMG_SIZE
+    )
+)
+
+
+# ============================================================
+# CONVERT IMAGE TO NUMPY
+# ============================================================
+
+image_array = np.array(
+    image,
+    dtype=np.float32
+)
+
+
+# ============================================================
+# ADD BATCH DIMENSION
+# ============================================================
+
+image_array = np.expand_dims(
+    image_array,
+    axis=0
+)
+
+
+# ============================================================
+# PREDICT
+# ============================================================
+
+print("\nPredicting...")
+
+predictions = model.predict(
+    image_array,
+    verbose=0
+)
+
+
+# ============================================================
+# GET TOP PREDICTION
+# ============================================================
+
+predicted_index = np.argmax(
+    predictions[0]
+)
+
+predicted_letter = CLASS_NAMES[
+    predicted_index
+]
+
+confidence = (
+    predictions[0][predicted_index]
+    * 100
+)
+
+
+# ============================================================
+# DISPLAY RESULT
+# ============================================================
+
+print("\n")
+print("=" * 50)
+print("       SIGN LANGUAGE PREDICTION")
+print("=" * 50)
+
+print(
+    f"\nPredicted Letter : {predicted_letter}"
+)
+
+print(
+    f"Confidence       : {confidence:.2f}%"
+)
+
+print("\n")
+print("=" * 50)
+
+
+# ============================================================
+# SHOW TOP 3 PREDICTIONS
+# ============================================================
+
+top_3 = np.argsort(
+    predictions[0]
+)[-3:][::-1]
+
+
+print("\nTop 3 Predictions:")
+
+for index in top_3:
+
+    letter = CLASS_NAMES[index]
+
+    score = predictions[0][index] * 100
+
+    print(
+        f"{letter} : {score:.2f}%"
+    )
+
+
+print("\nPrediction completed!")
